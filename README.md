@@ -638,6 +638,9 @@ unlock_code: Ctrl+Option+Cmd+X
 #           across your Apple devices via iCloud. Those two Shortcuts must
 #           already exist (see README "First-run setup") or startup aborts with
 #           exit code 6.
+#   Linux : GNOME banners are hidden on every session either way (they would
+#           draw above the shield); true only makes unreadable GNOME
+#           notification settings fatal (exit code 6).
 # Ignored entirely in overlay_style 'none'. Per-run override: --focus=true|false
 # focus: false
 
@@ -1318,7 +1321,8 @@ Only the platform layer is different:
 | Input lock | `CGEventTap` | exclusive `EVIOCGRAB` of every `/dev/input/event*` |
 | Awake lock | IOPMAssertion / `caffeinate` | `systemd-inhibit` + `gnome-session-inhibit`, tied to dndmode's PID |
 | Mute | `osascript` | `wpctl` (PipeWire), `pactl` as fallback |
-| `focus` | Shortcuts `dndmode-on/off` | GNOME `show-banners` off, previous value restored |
+| Banners | shield above Notification Center | GNOME `show-banners` off for every session, previous value restored |
+| `focus` | Shortcuts `dndmode-on/off` | only makes unreadable GNOME notification settings fatal (exit `6`) |
 | `--watch` trigger | Carbon hotkey | GNOME custom shortcut running `dndmode --activate` |
 
 ```bash
@@ -1354,8 +1358,16 @@ Differences worth knowing:
 - **`--watch`** adds an entry named `dndmode` to Settings → Keyboard → Custom
   Shortcuts and removes it on exit. If the watch process was killed with `-9`,
   the next press of the combination removes the leftover entry.
-- **`focus`** needs no setup; exit `6` means the GNOME notification settings
-  could not be read.
+- **Banners.** GNOME Shell draws notification banners above every window. It
+  holds ordinary ones back over a fullscreen window, but not "“…” is ready"
+  (an app window asking for attention, as messengers do on a new message).
+  So every session turns `show-banners` off, the same switch as Do Not
+  Disturb, and restores it on exit or, after a crash, on the next launch.
+  Notifications still reach the list in the top bar. Critical ones (low
+  battery) still show: GNOME exempts them.
+- **`focus`** is kept for a shared config: banners are hidden either way, and
+  `focus: true` only turns unreadable GNOME notification settings into exit
+  `6`.
 
 ## Building from source
 
@@ -1398,7 +1410,7 @@ internal/linux/
   evdev/              EVIOCGRAB input lock + unlock matching + capture
   inhibit/            idle / suspend inhibitor chain
   audio/              wpctl / pactl mute and restore
-  notify/             GNOME notification banners (focus)
+  notify/             GNOME notification banners
   gnomekeys/          watch-mode GNOME custom shortcut
 internal/state/       teardown registry + runtime.json crash recovery
 internal/supervisor/  single-point shutdown fan-in

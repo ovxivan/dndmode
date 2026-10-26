@@ -1077,6 +1077,9 @@ unlock_code: %s
 #           across your Apple devices via iCloud. Those two Shortcuts must
 #           already exist (see README "First-run setup") or startup aborts with
 #           exit code 6.
+#   Linux : GNOME banners are hidden on every session either way (they would
+#           draw above the shield); true only makes unreadable GNOME
+#           notification settings fatal (exit code 6).
 # Ignored entirely in overlay_style 'none'. Per-run override: --focus=true|false
 # focus: false
 

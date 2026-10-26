@@ -9,7 +9,7 @@
 //	input lock  EVIOCGRAB on /dev/input/event*    (internal/linux/evdev)
 //	awake lock  systemd-inhibit + gnome-session   (internal/linux/inhibit)
 //	mute        wpctl / pactl                     (internal/linux/audio)
-//	focus       GNOME show-banners                (internal/linux/notify)
+//	banners     GNOME show-banners, every session (internal/linux/notify)
 //	watch key   GNOME custom shortcut + SIGUSR1   (internal/linux/gnomekeys)
 //
 // Every overlay_style is available: black, dvd, matrix, terminal, gold,
@@ -355,7 +355,9 @@ func run() int {
 		return exitPlatformErr
 	}
 
-	// --- Step 9.5: notification settings (focus) ---
+	// --- Step 9.5: notification settings ---
+	// Banners are hidden on every session (Steps 13.3, 13.7); focus: true only
+	// turns an unreadable setting from "nothing to hide" into exit 6.
 	focusRunner := notify.NewRunner()
 	if effectiveFocus {
 		if err := notify.Check(ctx, focusRunner); err != nil {
@@ -426,6 +428,9 @@ func run() int {
 				priorMuted = &got
 			}
 		}
+		// Banners: read before runtime.json, so crash recovery turns them
+		// back on only when this session turned them off.
+		hideBanners := notify.Shown(ctx, focusRunner)
 
 		releaseLock, lockErr := acquirePublishLock(filepath.Dir(runtimeMgr.Path()))
 		switch {
@@ -468,7 +473,7 @@ func run() int {
 			PriorFocus:   nil,
 			AssertionID:  0, // no assertion on Linux; the inhibitor dies with us
 			PriorMuted:   priorMuted,
-			FocusEnabled: &effectiveFocus,
+			FocusEnabled: &hideBanners,
 		}); err != nil {
 			runtimeMgr.Disown()
 			releaseLock()
@@ -477,13 +482,9 @@ func run() int {
 		}
 		releaseLock()
 
-		// Step 13.7: focus + mute, best-effort, releasers pushed regardless.
-		if effectiveFocus {
-			prior, ferr := notify.Activate(ctx, focusRunner)
-			if ferr != nil {
-				log.Warn("focus activate failed", slog.Any("err", ferr))
-			}
-			rs.Push(notify.NewReleaser(focusRunner, prior, log))
+		// Step 13.7: banners + mute, best-effort, releasers pushed regardless.
+		if hideBanners {
+			rs.Push(notify.Hide(ctx, focusRunner, log))
 		}
 		if priorMuted != nil {
 			if err := muteRunner.SetMuted(ctx, true); err != nil {

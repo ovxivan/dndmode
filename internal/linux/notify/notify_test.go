@@ -29,24 +29,31 @@ func (f *fakeGSettings) run(_ context.Context, name string, args ...string) ([]b
 	return []byte(f.value + "\n"), nil
 }
 
-func TestActivateRelease_RestoresPrior(t *testing.T) {
+func TestHideRelease_TurnsBannersBackOn(t *testing.T) {
 	ctx := context.Background()
-	for _, prior := range []string{"true", "false"} {
-		f := &fakeGSettings{value: prior}
-		r := &Runner{run: f.run}
-		was, err := Activate(ctx, r)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if f.value != "false" {
-			t.Errorf("after Activate show-banners = %s", f.value)
-		}
-		rel := NewReleaser(r, was, nil)
-		_ = rel.Release()
-		_ = rel.Release()
-		if f.value != prior {
-			t.Errorf("after Release show-banners = %s, want %s", f.value, prior)
-		}
+	f := &fakeGSettings{value: "true"}
+	r := &Runner{run: f.run}
+	if !Shown(ctx, r) {
+		t.Fatal("Shown = false with banners on")
+	}
+	rel := Hide(ctx, r, nil)
+	if f.value != "false" {
+		t.Errorf("after Hide show-banners = %s", f.value)
+	}
+	_ = rel.Release()
+	_ = rel.Release()
+	if f.value != "true" {
+		t.Errorf("after Release show-banners = %s, want true", f.value)
+	}
+}
+
+func TestShown_NothingToHide(t *testing.T) {
+	ctx := context.Background()
+	if Shown(ctx, &Runner{run: (&fakeGSettings{value: "false"}).run}) {
+		t.Error("Shown = true with banners already off")
+	}
+	if Shown(ctx, &Runner{run: (&fakeGSettings{fail: true}).run}) {
+		t.Error("Shown = true without GNOME settings")
 	}
 }
 

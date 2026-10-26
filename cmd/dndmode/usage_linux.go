@@ -12,7 +12,8 @@ import (
 const usageText = `dndmode - lock an unattended Linux desktop without stopping the work it is doing.
 
 Covers every monitor with a black shield, grabs the keyboard, mouse and touchpad
-(evdev), keeps the session awake and mutes it; background processes keep running.
+(evdev), keeps the session awake, mutes it and hides GNOME notification banners;
+background processes keep running.
 The shield comes down when the unlock code from the config is typed - silently,
 no prompt.
 
@@ -29,7 +30,8 @@ Flags (per run; omitted = the config value):
                     <lang> = go|python|typescript|rust|ys|sql|psql|mysql|oracle|
                              varaq|elvish|php
   --mute <bool>     mute the default audio output for the session (true|false)
-  --focus <bool>    hide GNOME notification banners for the session (true|false)
+  --focus <bool>    require GNOME notification settings, exit 6 without them
+                    (banners are hidden on every session either way)
   --timer <dur>     auto-unlock after a Go duration (30m, 1h30m, 90s), then exit 0
   --debug           print banners, diagnostics and logs; default is silent, exit codes only
 

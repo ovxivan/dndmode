@@ -1,13 +1,17 @@
 //go:build linux
 
-// Package notify is the Linux "focus" option: it hides GNOME notification
-// banners for the session (Settings → Notifications → Do Not Disturb) by
-// flipping org.gnome.desktop.notifications show-banners, and restores the
-// previous value on exit.
+// Package notify hides GNOME notification banners for the session
+// (Settings → Notifications → Do Not Disturb) by flipping
+// org.gnome.desktop.notifications show-banners, and restores the previous
+// value on exit.
 //
-// Unlike the macOS Focus it needs no setup (no Shortcuts) and does not sync
-// to other devices, but it is still opt-in (focus: true) to keep the two
-// platforms' defaults identical.
+// It runs on every session, not only with focus: true. GNOME Shell draws
+// banners above every client window, and while it holds ordinary ones back
+// over a fullscreen window, "“…” is ready" banners (an app window asking
+// for attention, as messengers do on a new message) skip that check. The
+// macOS shield sits above Notification Center, so hiding them is the Linux
+// side of the same guarantee. Critical banners still show: GNOME exempts
+// them from show-banners too.
 package notify
 
 import (
@@ -104,14 +108,22 @@ func Check(ctx context.Context, r *Runner) error {
 	return err
 }
 
-// Activate hides banners and returns whether they were shown before, for
-// the Releaser to restore.
-func Activate(ctx context.Context, r *Runner) (prior bool, err error) {
-	prior, err = r.Banners(ctx)
-	if err != nil {
-		return true, err
+// Shown reports whether banners are shown now, that is whether a session
+// has to hide them. An unreadable setting (not a GNOME session) gives
+// false: there is nothing to hide or to restore.
+func Shown(ctx context.Context, r *Runner) bool {
+	shown, err := r.Banners(ctx)
+	return err == nil && shown
+}
+
+// Hide turns banners off and returns the Releaser that turns them back on.
+// A failed write is only logged: the shield still covers everything else.
+func Hide(ctx context.Context, r *Runner, log *slog.Logger) *Releaser {
+	rel := NewReleaser(r, true, log)
+	if err := r.SetBanners(ctx, false); err != nil {
+		rel.log.Warn("hide notification banners failed", slog.Any("err", err))
 	}
-	return prior, r.SetBanners(ctx, false)
+	return rel
 }
 
 // Releaser restores the banner setting on Cleanup. It satisfies
