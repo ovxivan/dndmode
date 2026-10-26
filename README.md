@@ -328,7 +328,7 @@ when omitted.
 
 | Flag | Values | Default | Effect |
 | --- | --- | --- | --- |
-| `--style` | `black` \| `matrix` \| `terminal`[`:go`\|`python`\|`typescript`\|`rust`\|`ys`\|`sql`\|`psql`\|`mysql`\|`oracle`\|`varaq`\|`elvish`\|`php`] \| `dvd` \| `gold` \| `bamboo` \| `glass`[`:radius`] \| `none` | config | Overlay look for this run; wins over `overlay_style`. `terminal:<lang>` picks the source language (default `go`). |
+| `--style` | `black` \| `matrix` \| `terminal`[`:go`\|`python`\|`typescript`\|`rust`\|`ys`\|`sql`\|`psql`\|`mysql`\|`oracle`\|`varaq`\|`elvish`\|`php`] \| `dvd` \| `gold` \| `bamboo` \| `sharks` \| `glass`[`:radius`] \| `none` | config | Overlay look for this run; wins over `overlay_style`. `terminal:<lang>` picks the source language (default `go`). `sharks` is Linux only. |
 | `--mute` | `true` \| `false` | config | Mute system audio for this run. |
 | `--focus` | `true` \| `false` | config | Toggle Do Not Disturb for this run. |
 | `--timer` | Go duration (`30m`, `1h30m`, `90s`) | off | Auto-unlock after the duration, then exit `0`. |
@@ -571,6 +571,10 @@ unlock_code: Ctrl+Option+Cmd+X
 #            moon, pixel art in parallax layers, with mist, drifting leaves,
 #            a few fireflies and a panda wandering far off. Cosmetic only;
 #            opaque, every blocking guarantee is identical to black.
+#   sharks : Linux only. An ASCII ocean: schools of tiny fish swim and
+#            scatter as four sharks drawn in shaded glyphs hunt them, and
+#            their wakes ripple in cyan. Cosmetic only; opaque, every
+#            blocking guarantee is identical to black.
 #   glass  : TRANSPARENT frosted glass — the blurred desktop shows through.
 #            Trades the no-bleed-through guarantee for the look; keyboard and
 #            trackpad are still fully blocked. Blur strength = glass_blur below.
@@ -965,6 +969,7 @@ off (see [Known limitations](#known-limitations)).
 | `dvd` | A "DVD VIDEO" logo bounces around an opaque black shield, changing color on every edge hit. Cosmetic. | No | Yes |
 | `gold` | A candlestick chart of a gold price climbing steadily, with pixel-art gold coins falling behind it, over an opaque black shield. Cosmetic. | No | Yes |
 | `bamboo` | A dim pixel-art walk through a moonlit bamboo forest, in parallax layers, with a panda wandering far off, over an opaque black shield. Cosmetic. | No | Yes |
+| `sharks` | Linux only. An ASCII ocean: schools of tiny fish scatter as four sharks of random species, drawn cell by cell in shaded glyphs, hunt them, over an opaque black shield. Cosmetic. | No | Yes |
 | `glass` | The desktop as it was when the shield went up, blurred and slightly darkened. | Yes, by design | Yes |
 | `none` | No overlay. Awake-only mode - see below. | n/a | No |
 
@@ -1076,6 +1081,23 @@ cheap: a few ms a frame on a Retina laptop. Like `dvd`, it is a purely cosmetic
 content swap on top of the same opaque black shield, so every blocking guarantee
 is identical to `black`, and the animation is ambient - it never reacts to
 input. There are no knobs: `dndmode --style bamboo` (or `overlay_style: bamboo`).
+
+**`sharks`** (Linux only). An ASCII ocean after
+[ascii-sharks](https://github.com/stackedlol/ascii-sharks) (MIT). The screen is
+a faint grid of cells on black. Schools of tiny fish, one dash per cell, swim
+as boids: sardines mill into bait balls, anchovies stream in ribbons, gobies
+swarm. Four sharks of random species (classic, hammerhead, great hammerhead,
+tiger, zebra, mako, thresher, nurse), the smaller ones dimmer as if farther
+away, patrol round the middle and hunt stragglers. They are drawn cell by cell
+in shaded blocks and glyphs that shimmer with accent colours, with fins that
+bank into turns and a body wave down to the tail. A school bolts in a wave of
+alarm when a shark comes near, an eaten fish flashes red, and eaten fish come
+back as new schools from the edges. Wakes ripple out in cyan dots. The world
+steps at 60 frames a second. Like `dvd`, it is a purely cosmetic content swap
+on top of the same opaque black shield, so every blocking guarantee is
+identical to `black`, and the animation is ambient - it never reacts to input.
+The macOS build refuses it with exit `1`. There are no knobs:
+`dndmode --style sharks` (or `overlay_style: sharks`).
 
 **Awake-only mode (`none`).** `overlay_style: none` (or `dndmode --style none`) turns
 dndmode into a thin [`caffeinate(8)`](https://ss64.com/mac/caffeinate.html) wrapper.
@@ -1314,7 +1336,7 @@ Only the platform layer is different:
 
 | Layer | macOS | Linux |
 | --- | --- | --- |
-| Shield | `NSWindow` per display | GTK4 fullscreen window per monitor (`black`, `glass`, or the animated `dvd`, `matrix`, `terminal`, `gold` and `bamboo`) |
+| Shield | `NSWindow` per display | GTK4 fullscreen window per monitor (`black`, `glass`, or the animated `dvd`, `matrix`, `terminal`, `gold`, `bamboo` and the Linux-only `sharks`) |
 | Input lock | `CGEventTap` | exclusive `EVIOCGRAB` of every `/dev/input/event*` |
 | Awake lock | IOPMAssertion / `caffeinate` | `systemd-inhibit` + `gnome-session-inhibit`, tied to dndmode's PID |
 | Mute | `osascript` | `wpctl` (PipeWire), `pactl` as fallback |
@@ -1337,7 +1359,7 @@ Differences worth knowing:
   position: `option` is Alt, `cmd` is Super. The default code is therefore
   `Ctrl+Alt+Super+X`, the default `activate_hotkey` `Ctrl+Alt+Super+D`. A
   digest written by `--set-password` on one platform works on the other.
-- **Styles.** Every style: `black`, `dvd`, `matrix`, `terminal` (every `terminal:<lang>`), `gold`, `bamboo`, `glass` and `none`.
+- **Styles.** Every style: `black`, `dvd`, `matrix`, `terminal` (every `terminal:<lang>`), `gold`, `bamboo`, `glass`, `none`, and `sharks` (Linux only).
 - **`glass`** takes its still through `org.freedesktop.portal.Screenshot`, before
   the shield appears and before input is grabbed. The first time GNOME asks
   whether to allow screenshots; the answer is remembered and covers every
@@ -1394,7 +1416,7 @@ internal/macos/
   focus/              Do Not Disturb via the Shortcuts CLI
   permissions/        Accessibility, Input Monitoring, platform, secure-input gates
 internal/linux/
-  overlay/            GTK4 per-monitor shield, black, dvd, matrix, terminal, gold, bamboo and glass styles
+  overlay/            GTK4 per-monitor shield, black, dvd, matrix, terminal, gold, bamboo, sharks and glass styles
   evdev/              EVIOCGRAB input lock + unlock matching + capture
   inhibit/            idle / suspend inhibitor chain
   audio/              wpctl / pactl mute and restore

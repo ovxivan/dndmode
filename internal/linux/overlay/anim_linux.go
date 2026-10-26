@@ -55,6 +55,9 @@ func newAnimation(style, lang string, log *slog.Logger) animation {
 		return &goldAnim{}
 	case "bamboo":
 		return &bambooAnim{}
+	case "sharks":
+		loadSharksAtlas()
+		return &sharksAnim{}
 	}
 	return nil
 }
@@ -599,6 +602,55 @@ func (a *bambooAnim) freeC() {
 // free releases the sprite set and the canvas; called when the window goes
 // away.
 func (a *bambooAnim) free() { a.freeC() }
+
+// --- sharks ---
+
+var sharksAtlasOnce sync.Once
+
+// loadSharksAtlas renders every glyph at every cell size into the C-side
+// atlas once per process.
+func loadSharksAtlas() {
+	sharksAtlasOnce.Do(func() {
+		cells := make([]C.double, 0, 3*sharksCellN)
+		for i := range sharksCellN {
+			cw, ch, font := sharksCellSize(i)
+			cells = append(cells, C.double(cw), C.double(ch), C.double(font))
+		}
+		glyphs := C.malloc(C.size_t(len(sharksGlyphs)) * C.size_t(unsafe.Sizeof(uintptr(0))))
+		defer C.free(glyphs)
+		list := unsafe.Slice((**C.char)(glyphs), len(sharksGlyphs))
+		for i, g := range sharksGlyphs {
+			list[i] = C.CString(g)
+		}
+		C.overlay_sharks_atlas(&cells[0], C.int(sharksCellN), (**C.char)(glyphs), C.int(len(sharksGlyphs)))
+		for _, p := range list {
+			C.free(unsafe.Pointer(p))
+		}
+	})
+}
+
+// sharksAnim draws a sharksView: the grid, then the cells of the last step
+// in one C call. A display frame that took no step is not repainted.
+type sharksAnim struct{ sharksView }
+
+// still reports a frame the widget already shows.
+func (a *sharksAnim) still() bool {
+	changed := a.changed
+	a.changed = false
+	return !changed
+}
+
+func (a *sharksAnim) draw(cr *C.cairo_t) {
+	if !a.seeded || a.boundsW == 0 {
+		return
+	}
+	f := &a.field
+	C.overlay_sharks_grid(cr, C.double(a.boundsW), C.double(a.boundsH), C.double(f.cw), C.double(f.ch), C.double(sharksGridAlpha))
+	if n := len(f.ops) / sharksOpStride; n > 0 {
+		// C.double is float64, so the ops go to C as they are.
+		C.overlay_sharks_cells(cr, C.int(f.size), (*C.double)(unsafe.Pointer(&f.ops[0])), C.int(n))
+	}
+}
 
 // --- glass ---
 

@@ -202,6 +202,94 @@ void overlay_matrix_glyph(cairo_t *cr, int size, int glyph, double x, double y, 
 	cairo_restore(cr);
 }
 
+// --- sharks -------------------------------------------------------------
+
+// A glyph atlas like matrix's, but each glyph sits centred in a mask the
+// size of a grid cell, so drawing one is a single mask at the cell corner.
+static cairo_surface_t **sharks_atlas;
+static int sharks_sizes, sharks_glyphs;
+static double sharks_cell[3 * 8];
+
+int overlay_sharks_atlas(const double *cell, int nsizes, const char *const *glyphs, int nglyphs) {
+	if (sharks_atlas != NULL) {
+		return 0;
+	}
+	if (nsizes < 1 || nsizes > 8) {
+		return -1;
+	}
+	cairo_surface_t **a = g_new0(cairo_surface_t *, (gsize)nsizes * nglyphs);
+	for (int s = 0; s < nsizes; s++) {
+		double cw = cell[3 * s] * ATLAS_SCALE, ch = cell[3 * s + 1] * ATLAS_SCALE;
+		PangoFontDescription *fd = pango_font_description_from_string("Monospace");
+		pango_font_description_set_weight(fd, PANGO_WEIGHT_SEMIBOLD);
+		pango_font_description_set_absolute_size(fd, cell[3 * s + 2] * ATLAS_SCALE * PANGO_SCALE);
+		for (int g = 0; g < nglyphs; g++) {
+			cairo_surface_t *m = cairo_image_surface_create(CAIRO_FORMAT_A8, (int)cw, (int)ch);
+			cairo_t *cr = cairo_create(m);
+			PangoLayout *l = pango_cairo_create_layout(cr);
+			pango_layout_set_font_description(l, fd);
+			pango_layout_set_text(l, glyphs[g], -1);
+			PangoRectangle logical;
+			pango_layout_get_pixel_extents(l, NULL, &logical);
+			// Centred on the cell, a pixel low, like canvas text drawn
+			// centre/middle at the cell's centre.
+			cairo_move_to(cr, (cw - logical.width) / 2, (ch - logical.height) / 2 + ATLAS_SCALE);
+			pango_cairo_show_layout(cr, l);
+			g_object_unref(l);
+			cairo_destroy(cr);
+			cairo_surface_set_device_scale(m, ATLAS_SCALE, ATLAS_SCALE);
+			a[s * nglyphs + g] = m;
+		}
+		pango_font_description_free(fd);
+	}
+	memcpy(sharks_cell, cell, sizeof(double) * 3 * nsizes);
+	sharks_atlas = a;
+	sharks_sizes = nsizes;
+	sharks_glyphs = nglyphs;
+	return 0;
+}
+
+void overlay_sharks_cells(cairo_t *cr, int size, const double *ops, int n) {
+	if (sharks_atlas == NULL || size < 0 || size >= sharks_sizes) {
+		return;
+	}
+	cairo_surface_t **glyphs = sharks_atlas + size * sharks_glyphs;
+	cairo_save(cr);
+	for (int i = 0; i < n; i++, ops += 9) {
+		int g = (int)ops[0];
+		cairo_set_source_rgba(cr, ops[5], ops[6], ops[7], ops[8]);
+		if (g < 0) {
+			cairo_rectangle(cr, ops[1], ops[2], ops[3], ops[4]);
+			cairo_fill(cr);
+		} else if (g < sharks_glyphs) {
+			cairo_mask_surface(cr, glyphs[g], ops[1], ops[2]);
+		}
+	}
+	cairo_restore(cr);
+}
+
+void overlay_sharks_grid(cairo_t *cr, double w, double h, double cw, double ch, double a) {
+	if (cw <= 0 || ch <= 0) {
+		return;
+	}
+	cairo_save(cr);
+	cairo_set_source_rgba(cr, 1, 1, 1, a);
+	cairo_set_line_width(cr, 1);
+	// Snapped to whole pixels, so a line covers one pixel column or row.
+	for (int c = 0; c * cw <= w; c++) {
+		double x = (int)(c * cw + 0.5) + 0.5;
+		cairo_move_to(cr, x, 0);
+		cairo_line_to(cr, x, h);
+	}
+	for (int r = 0; r * ch <= h; r++) {
+		double y = (int)(r * ch + 0.5) + 0.5;
+		cairo_move_to(cr, 0, y);
+		cairo_line_to(cr, w, y);
+	}
+	cairo_stroke(cr);
+	cairo_restore(cr);
+}
+
 // --- terminal -----------------------------------------------------------
 
 static PangoContext *term_ctx;

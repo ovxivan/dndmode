@@ -41,6 +41,16 @@ void overlay_dvd_draw(cairo_t *cr, double x, double y, double w, double h, doubl
 int overlay_matrix_atlas(const double *sizes, int nsizes, const char *const *glyphs, int nglyphs);
 void overlay_matrix_glyph(cairo_t *cr, int size, int glyph, double x, double y, double r, double g, double b);
 
+// sharks: renders every glyph of every cell size into the atlas once (cell
+// holds the width, height and glyph size of each, back to back), then
+// draws n ops of nine doubles in one call: glyph, x, y, w, h, r, g, b, a.
+// glyph -1 fills the box (x, y, w, h); otherwise that glyph is drawn centred
+// in the cell of the given size whose top-left is (x, y).
+int overlay_sharks_atlas(const double *cell, int nsizes, const char *const *glyphs, int nglyphs);
+void overlay_sharks_cells(cairo_t *cr, int size, const double *ops, int n);
+// The faint cell grid: one-pixel lines of white at alpha a every cw and ch.
+void overlay_sharks_grid(cairo_t *cr, double w, double h, double cw, double ch, double a);
+
 // terminal: corpus access (terminalcorpus_linux.c) and text drawing.
 int overlay_term_block_count(int lang);
 int overlay_term_block_len(int lang, int block);

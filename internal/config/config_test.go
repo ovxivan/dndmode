@@ -568,6 +568,21 @@ func TestLoader_Load_OverlayStyle(t *testing.T) {
 			},
 		},
 		{
+			name:     "overlay_style: sharks present",
+			yamlBody: "hotkey: Ctrl+Shift+Q\noverlay_style: sharks\n",
+			validateResp: func(t *testing.T, cfg config.Config, created bool, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if created {
+					t.Errorf("created = true, want false (file pre-existed)")
+				}
+				if cfg.OverlayStyle != config.OverlayStyleSharks {
+					t.Errorf("cfg.OverlayStyle = %q, want %q", cfg.OverlayStyle, config.OverlayStyleSharks)
+				}
+			},
+		},
+		{
 			name:     "overlay_style: glass present",
 			yamlBody: "hotkey: Ctrl+Shift+Q\noverlay_style: glass\n",
 			validateResp: func(t *testing.T, cfg config.Config, created bool, err error) {
@@ -639,7 +654,7 @@ func TestLoader_Load_OverlayStyle(t *testing.T) {
 				if verr := config.ValidateOverlayStyle("neon"); verr == nil {
 					t.Errorf("ValidateOverlayStyle(%q) = nil, want non-nil", "neon")
 				}
-				for _, ok := range []string{"", config.OverlayStyleBlack, config.OverlayStyleMatrix, config.OverlayStyleTerminal, config.OverlayStyleDVD, config.OverlayStyleGold, config.OverlayStyleBamboo, config.OverlayStyleGlass, config.OverlayStyleNone} {
+				for _, ok := range []string{"", config.OverlayStyleBlack, config.OverlayStyleMatrix, config.OverlayStyleTerminal, config.OverlayStyleDVD, config.OverlayStyleGold, config.OverlayStyleBamboo, config.OverlayStyleSharks, config.OverlayStyleGlass, config.OverlayStyleNone} {
 					if verr := config.ValidateOverlayStyle(ok); verr != nil {
 						t.Errorf("ValidateOverlayStyle(%q) = %v, want nil", ok, verr)
 					}
@@ -675,6 +690,7 @@ func TestValidateOverlayStyle(t *testing.T) {
 		config.OverlayStyleDVD,
 		config.OverlayStyleGold,
 		config.OverlayStyleBamboo,
+		config.OverlayStyleSharks,
 		config.OverlayStyleGlass,
 		config.OverlayStyleNone,
 	}
@@ -700,6 +716,10 @@ func TestValidateOverlayStyle(t *testing.T) {
 	if config.OverlayStyleBamboo != "bamboo" {
 		t.Errorf("OverlayStyleBamboo = %q, want %q", config.OverlayStyleBamboo, "bamboo")
 	}
+	// sharks is explicitly a valid style (constant value round-trips).
+	if config.OverlayStyleSharks != "sharks" {
+		t.Errorf("OverlayStyleSharks = %q, want %q", config.OverlayStyleSharks, "sharks")
+	}
 
 	// An unknown value errors and the message must name the full valid set,
 	// including the newly-added terminal, so main.go's stderr stays accurate.
@@ -707,7 +727,7 @@ func TestValidateOverlayStyle(t *testing.T) {
 	if err == nil {
 		t.Fatalf("ValidateOverlayStyle(%q) = nil, want error", "neon")
 	}
-	for _, want := range []string{"black", "matrix", "terminal", "dvd", "gold", "bamboo", "glass", "none"} {
+	for _, want := range []string{"black", "matrix", "terminal", "dvd", "gold", "bamboo", "sharks", "glass", "none"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q missing valid style %q", err.Error(), want)
 		}
