@@ -163,3 +163,24 @@ func TestKeep_RestartsADeadChain(t *testing.T) {
 		t.Errorf("second Release: %v", err)
 	}
 }
+
+func TestKeep_ChainDyingAtOnceAfterRestartBacksOff(t *testing.T) {
+	settle, lo, hi := keepSettle, keepRetryMin, keepRetryMax
+	keepSettle, keepRetryMin, keepRetryMax = 30*time.Millisecond, 10*time.Millisecond, time.Second
+	t.Cleanup(func() { keepSettle, keepRetryMin, keepRetryMax = settle, lo, hi })
+
+	// Every restart starts fine and exits at once. Without backoff that is
+	// a relaunch every ~10ms; doubling from 10ms gives a handful in 400ms.
+	f := &fakeChains{scripts: []string{"sleep 0.05", "exit 1"}}
+	k, err := keep(context.Background(), f.start, slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(400 * time.Millisecond)
+	if err := k.Release(); err != nil {
+		t.Fatal(err)
+	}
+	if n := f.calls.Load(); n > 8 {
+		t.Errorf("%d launches in 400ms: restarts of a chain that dies at once do not back off", n)
+	}
+}

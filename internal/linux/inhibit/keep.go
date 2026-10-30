@@ -95,6 +95,18 @@ func (k *Keeper) watch(ctx context.Context) {
 		case <-time.After(delay):
 		}
 		np, err := k.start()
+		if err == nil {
+			// A chain that starts and dies at once is the usual failure
+			// (logind gone, polkit denial); it must back off like an exec
+			// error, or it is relaunched every keepRetryMin all session.
+			select {
+			case <-np.Done():
+				err = fmt.Errorf("inhibitor exited at once: %w", np.Err())
+			case <-time.After(keepSettle):
+			case <-ctx.Done():
+			case <-k.stop:
+			}
+		}
 		k.mu.Lock()
 		switch {
 		case k.released:
