@@ -610,6 +610,9 @@ const (
 	// allowed; the first time it shows a dialog, which waits for a person.
 	glassWaitGranted = 5 * time.Second
 	glassWaitAsk     = 30 * time.Second
+	// glassWaitStart is AskGlassPermission's wait: nothing is locked yet and
+	// the person is at the terminal, so the dialog gets time to be read.
+	glassWaitStart = 3 * time.Minute
 )
 
 // glassShot is the desktop the portal captured, covering bounds.
@@ -637,9 +640,9 @@ func AskGlassPermission(log *slog.Logger) {
 	if C.overlay_glass_permission() != 0 {
 		return
 	}
-	log.Info("glass: asking for the screenshot permission", slog.Duration("timeout", glassWaitAsk))
+	log.Info("glass: asking for the screenshot permission", slog.Duration("timeout", glassWaitStart))
 	var surf unsafe.Pointer
-	if rc := C.overlay_glass_capture(C.int(glassWaitAsk.Milliseconds()), &surf); rc != C.GLASS_OK {
+	if rc := C.overlay_glass_capture(C.int(glassWaitStart.Milliseconds()), &surf); rc != C.GLASS_OK {
 		log.Warn("glass: screenshot permission not granted, sessions will draw a black shield", slog.String("reason", glassReason(rc)))
 		return
 	}

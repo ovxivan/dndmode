@@ -618,6 +618,50 @@ static guint shot_subscribe(GDBusConnection *bus, const char *path, shot_reply *
 		NULL, G_DBUS_SIGNAL_FLAGS_NONE, shot_response, r, shot_reply_free);
 }
 
+// A shot the portal still delivers after we stopped waiting: while the
+// access dialog is up it holds the request lock, so Close cannot cancel the
+// request, and a late "Allow" saves the desktop anyway. late_shot_watch
+// subscribes on the default context, which the UI loop runs, and the
+// callback deletes that file. Heap-owned by the subscription.
+typedef struct {
+	guint sub;
+} late_shot;
+
+static void late_shot_response(GDBusConnection *c, const gchar *sender, const gchar *path, const gchar *iface,
+	const gchar *signal, GVariant *params, gpointer data) {
+	(void)sender;
+	(void)path;
+	(void)iface;
+	(void)signal;
+	late_shot *l = data;
+	guint32 code = 0;
+	GVariant *results = NULL;
+	g_variant_get(params, "(u@a{sv})", &code, &results);
+	const gchar *uri = NULL;
+	if (g_variant_lookup(results, "uri", "&s", &uri)) {
+		gchar *file = g_filename_from_uri(uri, NULL, NULL);
+		if (file != NULL) {
+			g_unlink(file);
+			g_free(file);
+		}
+	}
+	g_variant_unref(results);
+	// Unsubscribing may free l, so clear it first.
+	guint sub = l->sub;
+	l->sub = 0;
+	if (sub != 0) {
+		g_dbus_connection_signal_unsubscribe(c, sub);
+	}
+}
+
+static void late_shot_watch(GDBusConnection *bus, const char *request) {
+	late_shot *l = g_new0(late_shot, 1);
+	g_main_context_push_thread_default(g_main_context_default());
+	l->sub = g_dbus_connection_signal_subscribe(bus, PORTAL_BUS, "org.freedesktop.portal.Request", "Response",
+		request, NULL, G_DBUS_SIGNAL_FLAGS_NONE, late_shot_response, l, g_free);
+	g_main_context_pop_thread_default(g_main_context_default());
+}
+
 int overlay_glass_capture(int timeout_ms, void **shot) {
 	static int seq;
 	*shot = NULL;
@@ -677,9 +721,10 @@ int overlay_glass_capture(int timeout_ms, void **shot) {
 
 		if (!reply->done) {
 			rc = GLASS_TIMEOUT;
-			// Close the request, or the portal still takes the shot once the
-			// dialog is answered and leaves the PNG behind with nobody to
-			// delete it.
+			// Watch first, so a Response racing the Close is not missed. Close
+			// stops a request the portal has not started on; one held by the
+			// access dialog is cleaned up by the watch instead.
+			late_shot_watch(bus, request);
 			GVariant *c = g_dbus_connection_call_sync(bus, PORTAL_BUS, request, "org.freedesktop.portal.Request",
 				"Close", NULL, NULL, G_DBUS_CALL_FLAGS_NONE, 1000, NULL, NULL);
 			if (c != NULL) {
