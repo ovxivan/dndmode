@@ -650,11 +650,13 @@ int overlay_glass_capture(int timeout_ms, void **shot) {
 
 	int rc = GLASS_OK;
 	gchar *uri = NULL;
+	gchar *request = NULL;
 	if (r == NULL) {
 		rc = GLASS_CALL_FAILED;
 	} else {
 		const gchar *handle = NULL;
 		g_variant_get(r, "(&o)", &handle);
+		request = g_strdup(handle);
 		if (strcmp(handle, path) != 0) {
 			// An old portal that ignores handle_token: follow its path.
 			g_dbus_connection_signal_unsubscribe(bus, sub);
@@ -675,6 +677,14 @@ int overlay_glass_capture(int timeout_ms, void **shot) {
 
 		if (!reply->done) {
 			rc = GLASS_TIMEOUT;
+			// Close the request, or the portal still takes the shot once the
+			// dialog is answered and leaves the PNG behind with nobody to
+			// delete it.
+			GVariant *c = g_dbus_connection_call_sync(bus, PORTAL_BUS, request, "org.freedesktop.portal.Request",
+				"Close", NULL, NULL, G_DBUS_CALL_FLAGS_NONE, 1000, NULL, NULL);
+			if (c != NULL) {
+				g_variant_unref(c);
+			}
 		} else if (reply->code != 0 || reply->uri == NULL) {
 			rc = GLASS_REFUSED;
 		} else {
@@ -687,6 +697,7 @@ int overlay_glass_capture(int timeout_ms, void **shot) {
 	}
 	g_main_context_pop_thread_default(ctx);
 	g_main_context_unref(ctx);
+	g_free(request);
 	g_free(path);
 	g_free(sender);
 	g_free(token);

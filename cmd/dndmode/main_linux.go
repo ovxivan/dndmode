@@ -567,6 +567,11 @@ func run() int {
 		_, _ = fmt.Fprintf(errW, "dndmode: overlay init failed: %v.\n", err)
 		return exitPlatformErr
 	}
+	// The style is fixed for the daemon's life, so the dialog is asked here,
+	// with the person still at the terminal, rather than at the first press.
+	if overlayStyle == config.OverlayStyleGlass {
+		overlay.AskGlassPermission(log)
+	}
 	watchOutW, watchErrW := io.Writer(os.Stdout), io.Writer(os.Stderr)
 	comboLabel := config.DefaultActivateHotkey
 	if cfg.ActivateHotkey != nil {

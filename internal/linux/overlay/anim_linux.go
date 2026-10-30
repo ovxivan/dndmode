@@ -619,6 +619,33 @@ type glassShot struct {
 	w, h   int
 }
 
+// glassAsked is set once AskGlassPermission has run: the person was at the
+// terminal and had their chance, so a session no longer waits for the
+// dialog. UI thread only.
+var glassAsked bool
+
+// AskGlassPermission shows the first-run screenshot dialog now, when the
+// glass style is about to be used by later sessions (watch mode): a session
+// waiting for it would leave the machine unlocked and unshielded for up to
+// glassWaitAsk while the person may already be walking away. The shot is
+// discarded. Does nothing when the answer is already stored. UI thread only.
+func AskGlassPermission(log *slog.Logger) {
+	if log == nil {
+		log = slog.Default()
+	}
+	glassAsked = true
+	if C.overlay_glass_permission() != 0 {
+		return
+	}
+	log.Info("glass: asking for the screenshot permission", slog.Duration("timeout", glassWaitAsk))
+	var surf unsafe.Pointer
+	if rc := C.overlay_glass_capture(C.int(glassWaitAsk.Milliseconds()), &surf); rc != C.GLASS_OK {
+		log.Warn("glass: screenshot permission not granted, sessions will draw a black shield", slog.String("reason", glassReason(rc)))
+		return
+	}
+	C.overlay_surface_free(surf)
+}
+
 // captureGlass takes the desktop shot for the monitors attached now, or
 // returns nil, and the shield draws black. It blocks the UI thread until
 // the portal answers, so it runs before any window is shown and before
@@ -635,6 +662,10 @@ func captureGlass(log *slog.Logger) *glassShot {
 		log.Warn("glass: screenshots are denied in the portal permission store, drawing a black shield")
 		return nil
 	case 0:
+		if glassAsked {
+			log.Warn("glass: screenshot permission was not granted when watch mode started, drawing a black shield; restart --watch to be asked again")
+			return nil
+		}
 		wait = glassWaitAsk
 		log.Info("glass: asking for the screenshot permission", slog.Duration("timeout", wait))
 	}
