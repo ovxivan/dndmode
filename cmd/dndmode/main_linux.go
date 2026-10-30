@@ -407,8 +407,8 @@ func run() int {
 		// Step 12.
 		rs.Push(runtimeMgr)
 
-		// Step 13: awake lock.
-		inh, err := inhibit.Start(ctx, os.Getpid(), cfg.AllowDisplaySleep, log)
+		// Step 13: awake lock, restarted if the chain dies mid-session.
+		inh, err := inhibit.Keep(ctx, os.Getpid(), cfg.AllowDisplaySleep, log)
 		if err != nil {
 			runtimeMgr.Disown()
 			_, _ = fmt.Fprintf(errW, "dndmode: acquire awake-lock failed: %v. Install systemd or gnome-session and re-run.\n", err)

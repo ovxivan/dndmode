@@ -116,6 +116,11 @@ func Start(ctx context.Context, pid int, allowDisplaySleep bool, log *slog.Logge
 	if err != nil {
 		return nil, err
 	}
+	return launch(ctx, argv, log)
+}
+
+// launch starts argv as a chain in its own process group.
+func launch(ctx context.Context, argv []string, log *slog.Logger) (*Process, error) {
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM) }

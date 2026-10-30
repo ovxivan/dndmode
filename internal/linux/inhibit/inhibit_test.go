@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"slices"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -92,6 +93,73 @@ func TestStartRelease(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	if err := p.Release(); err != nil {
+		t.Errorf("second Release: %v", err)
+	}
+}
+
+// fakeChains launches sh -c script for each call, in order; the last script
+// repeats. calls counts launches.
+type fakeChains struct {
+	scripts []string
+	calls   atomic.Int32
+}
+
+func (f *fakeChains) start() (*Process, error) {
+	n := int(f.calls.Add(1)) - 1
+	s := f.scripts[min(n, len(f.scripts)-1)]
+	return launch(context.Background(), []string{"sh", "-c", s}, slog.New(slog.DiscardHandler))
+}
+
+func shortKeepTimings(t *testing.T) {
+	t.Helper()
+	settle, lo, hi := keepSettle, keepRetryMin, keepRetryMax
+	keepSettle, keepRetryMin, keepRetryMax = 50*time.Millisecond, 10*time.Millisecond, 20*time.Millisecond
+	t.Cleanup(func() { keepSettle, keepRetryMin, keepRetryMax = settle, lo, hi })
+}
+
+func TestKeep_ChainDyingAtOnceIsAnError(t *testing.T) {
+	shortKeepTimings(t)
+	f := &fakeChains{scripts: []string{"exit 1"}}
+	if _, err := keep(context.Background(), f.start, slog.New(slog.DiscardHandler)); err == nil {
+		t.Fatal("keep returned no error for a chain that exited at once")
+	}
+}
+
+func TestKeep_RestartsADeadChain(t *testing.T) {
+	shortKeepTimings(t)
+	// The first chain outlives the settle wait and then dies; the second
+	// holds until Release.
+	f := &fakeChains{scripts: []string{"sleep 0.1", "exec sleep 30"}}
+	k, err := keep(context.Background(), f.start, slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		k.mu.Lock()
+		cur := k.cur
+		k.mu.Unlock()
+		n := f.calls.Load()
+		if n >= 2 && cur != nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("chain not restarted: %d launches", n)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	k.mu.Lock()
+	cur := k.cur
+	k.mu.Unlock()
+	if err := k.Release(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-cur.Done():
+	default:
+		t.Fatal("Release left the restarted chain running")
+	}
+	if err := k.Release(); err != nil {
 		t.Errorf("second Release: %v", err)
 	}
 }
