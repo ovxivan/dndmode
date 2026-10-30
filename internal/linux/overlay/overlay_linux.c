@@ -618,11 +618,10 @@ static guint shot_subscribe(GDBusConnection *bus, const char *path, shot_reply *
 		NULL, G_DBUS_SIGNAL_FLAGS_NONE, shot_response, r, shot_reply_free);
 }
 
-// A shot the portal still delivers after we stopped waiting: while the
-// access dialog is up it holds the request lock, so Close cannot cancel the
-// request, and a late "Allow" saves the desktop anyway. late_shot_watch
-// subscribes on the default context, which the UI loop runs, and the
-// callback deletes that file. Heap-owned by the subscription.
+// A shot the portal still delivers after we stopped waiting: a slow portal,
+// or a late "Allow" in the access dialog, saves the desktop anyway.
+// late_shot_watch subscribes on the default context, which the UI loop runs,
+// and the callback deletes that file. Heap-owned by the subscription.
 typedef struct {
 	guint sub;
 } late_shot;
@@ -721,15 +720,10 @@ int overlay_glass_capture(int timeout_ms, void **shot) {
 
 		if (!reply->done) {
 			rc = GLASS_TIMEOUT;
-			// Watch first, so a Response racing the Close is not missed. Close
-			// stops a request the portal has not started on; one held by the
-			// access dialog is cleaned up by the watch instead.
+			// No Request.Close: queued behind the access dialog it runs after a
+			// late Allow, when the shell is already writing the file, and
+			// unexports the request so the Response that names it never comes.
 			late_shot_watch(bus, request);
-			GVariant *c = g_dbus_connection_call_sync(bus, PORTAL_BUS, request, "org.freedesktop.portal.Request",
-				"Close", NULL, NULL, G_DBUS_CALL_FLAGS_NONE, 1000, NULL, NULL);
-			if (c != NULL) {
-				g_variant_unref(c);
-			}
 		} else if (reply->code != 0 || reply->uri == NULL) {
 			rc = GLASS_REFUSED;
 		} else {
