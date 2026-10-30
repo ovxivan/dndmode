@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -429,23 +428,6 @@ func (t *tracker) mods() hotkey.ModFlag {
 		}
 	}
 	return m
-}
-
-// DeviceNames lists the names of the devices dndmode would grab, for
-// diagnostics. Errors are skipped.
-func DeviceNames() []string {
-	paths, _ := eventNodes()
-	var names []string
-	for _, p := range paths {
-		d, err := openDevice(p)
-		if err != nil {
-			continue
-		}
-		names = append(names, d.name)
-		_ = unix.Close(d.fd)
-	}
-	slices.Sort(names)
-	return slices.Compact(names)
 }
 
 // CheckAccess reports whether every input device can be opened, without
