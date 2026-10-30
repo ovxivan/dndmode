@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io/fs"
 	"os"
 	"strconv"
@@ -25,10 +26,13 @@ type kernProber struct{}
 // PID from a live one, then /proc/<pid>/stat for the start time.
 func NewKernProber() Prober { return kernProber{} }
 
-// StartTime implements Prober. The result is boot time (whole seconds, from
-// /proc/stat btime) plus the process start offset in clock ticks, so two
-// calls for the same process always return the same instant — the property
-// Inspect's comparison depends on.
+// StartTime implements Prober. The result identifies the process rather than
+// telling the time: a base derived from this boot's boot_id plus the start
+// offset in clock ticks. Both are fixed for the life of the process, so two
+// calls — from any process, before or after the wall clock is stepped —
+// return the same instant, which is what Inspect's exact comparison needs.
+// /proc/stat btime is not usable as the base: the kernel derives it from the
+// wall clock, so NTP or a resume from suspend moves it.
 func (kernProber) StartTime(pid int) (time.Time, error) {
 	// PID 0 means "my process group" to kill(2) and negative PIDs are
 	// broadcasts; neither is something a watch process can have written.
@@ -54,12 +58,22 @@ func (kernProber) StartTime(pid int) (time.Time, error) {
 	if state == 'Z' || state == 'X' {
 		return time.Time{}, ErrNoProcess
 	}
-	boot, err := bootTime()
+	boot, err := bootID()
 	if err != nil {
 		return time.Time{}, err
 	}
+	return startInstant(boot, ticks), nil
+}
+
+// startInstant folds a boot identity and a start offset into one instant:
+// the FNV-1a hash of bootID as whole seconds since the epoch, plus ticks.
+// A reboot changes the base, so a record left from a previous boot does not
+// match a new process that happens to get the same PID and offset.
+func startInstant(bootID []byte, ticks uint64) time.Time {
+	h := fnv.New32a()
+	_, _ = h.Write(bootID)
 	offset := time.Duration(ticks) * (time.Second / clockTicks)
-	return boot.Add(offset), nil
+	return time.Unix(int64(h.Sum32()), 0).Add(offset)
 }
 
 // parseProcStat extracts the state (field 3) and starttime (field 22) from
@@ -84,34 +98,22 @@ func parseProcStat(raw []byte) (byte, uint64, error) {
 
 var (
 	bootOnce sync.Once
-	bootAt   time.Time
+	bootRaw  []byte
 	bootErr  error
 )
 
-// bootTime reads btime from /proc/stat once per process. It is fixed for the
-// lifetime of the kernel, and reading it once keeps every StartTime result
-// on the same base.
-func bootTime() (time.Time, error) {
+// bootID reads /proc/sys/kernel/random/boot_id once per process. It is fixed
+// for the lifetime of the kernel and unaffected by the wall clock.
+func bootID() ([]byte, error) {
 	bootOnce.Do(func() {
-		raw, err := os.ReadFile("/proc/stat")
+		raw, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
 		if err != nil {
-			bootErr = fmt.Errorf("read /proc/stat: %w", err)
+			bootErr = fmt.Errorf("read boot_id: %w", err)
 			return
 		}
-		for line := range bytes.SplitSeq(raw, []byte{'\n'}) {
-			rest, ok := bytes.CutPrefix(line, []byte("btime "))
-			if !ok {
-				continue
-			}
-			sec, err := strconv.ParseInt(string(bytes.TrimSpace(rest)), 10, 64)
-			if err != nil {
-				bootErr = fmt.Errorf("parse btime: %w", err)
-				return
-			}
-			bootAt = time.Unix(sec, 0)
-			return
+		if bootRaw = bytes.TrimSpace(raw); len(bootRaw) == 0 {
+			bootErr = errors.New("boot_id is empty")
 		}
-		bootErr = errors.New("/proc/stat has no btime line")
 	})
-	return bootAt, bootErr
+	return bootRaw, bootErr
 }
