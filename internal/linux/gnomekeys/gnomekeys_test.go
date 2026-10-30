@@ -5,6 +5,7 @@ package gnomekeys
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"slices"
 	"strings"
 	"testing"
@@ -137,5 +138,32 @@ func TestRegisterRemove_KeepsUserEntries(t *testing.T) {
 	}
 	if _, ok := f.vals[entry()+" binding"]; ok {
 		t.Error("binding not reset")
+	}
+}
+
+func TestRegistration_DisownKeepsEntry(t *testing.T) {
+	f := &fakeDconf{vals: map[string]string{listSchema + " " + listKey: "@as []"}}
+	c := client{run: f.run}
+	if err := c.register("<Control><Alt><Super>d", "dndmode --activate"); err != nil {
+		t.Fatal(err)
+	}
+	r := &Registration{c: c, log: slog.New(slog.DiscardHandler)}
+	r.Disown()
+	if err := r.Release(); err != nil {
+		t.Fatal(err)
+	}
+	if list := parseStrv(f.vals[listSchema+" "+listKey]); !slices.Equal(list, []string{Path}) {
+		t.Errorf("list after disowned release: %v", list)
+	}
+	if f.vals[entry()+" binding"] != "<Control><Alt><Super>d" {
+		t.Errorf("binding = %q, want it kept", f.vals[entry()+" binding"])
+	}
+
+	owned := &Registration{c: c, log: slog.New(slog.DiscardHandler)}
+	if err := owned.Release(); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := f.vals[entry()+" binding"]; ok {
+		t.Error("owned release did not reset the binding")
 	}
 }

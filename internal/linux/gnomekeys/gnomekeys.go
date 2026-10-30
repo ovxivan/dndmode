@@ -318,7 +318,15 @@ func Remove() error { return client{run: gsettings}.remove() }
 // Name implements state.Releaser.
 func (r *Registration) Name() string { return "global-hotkey" }
 
-// Release implements state.Releaser. Idempotent.
+// Disown makes Release a no-op. The entry lives at one fixed dconf path
+// shared by every dndmode, so a --watch that lost the start race to another
+// one has just rewritten the winner's shortcut; removing it on the way out
+// would leave the running watch process with a combination that does nothing.
+func (r *Registration) Disown() {
+	r.once.Do(func() { r.log.Debug("gnome shortcut left to the running watch process", slog.String("path", Path)) })
+}
+
+// Release implements state.Releaser. Idempotent; does nothing after Disown.
 func (r *Registration) Release() error {
 	var err error
 	r.once.Do(func() { err = r.c.remove() })

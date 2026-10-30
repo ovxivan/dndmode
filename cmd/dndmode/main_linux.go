@@ -611,6 +611,11 @@ func run() int {
 		errW:       watchErrW,
 		log:        log,
 	}); code != exitOK {
+		// Another --watch won the re-check under the publish lock (or holds
+		// the lock): the shortcut just registered is its shortcut too.
+		if code == exitConcurrentInstance {
+			hotkeyReg.Disown()
+		}
 		return code
 	}
 
